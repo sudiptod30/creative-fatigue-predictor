@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Creative Fatigue Predictor (LinkedIn)</title>
+    <title>Creative Fatigue Predictor (LinkedIn) with AI Insights</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -52,6 +52,30 @@
             cursor: pointer;
             border: none;
         }
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3b82f6; /* Blue */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Ensure AI insights are readable */
+        #aiInsightsContent ul {
+            list-style-type: disc;
+            margin-left: 20px;
+        }
+        #aiInsightsContent li {
+            margin-bottom: 8px;
+        }
+         #aiInsightsContent p {
+            margin-bottom: 12px;
+        }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 flex flex-col items-center justify-center min-h-screen p-4 selection:bg-blue-500 selection:text-white">
@@ -59,7 +83,7 @@
     <div class="bg-white shadow-xl rounded-lg p-6 md:p-10 w-full max-w-3xl">
         <header class="mb-8 text-center">
             <h1 class="text-3xl md:text-4xl font-bold text-blue-600">Creative Fatigue Predictor</h1>
-            <p class="text-slate-600 mt-2">Estimate when ad fatigue might set in for your LinkedIn campaigns.</p>
+            <p class="text-slate-600 mt-2">Estimate when ad fatigue might set in for your LinkedIn campaigns, now with AI-powered insights!</p>
         </header>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -145,9 +169,23 @@
                     <li>Effective Days Until Fatigue (min of theoretical and pacing): <strong id="effectiveDaysToFatigueResult"></strong> days</li>
                 </ul>
                 <p class="mt-4 text-xs text-slate-500 text-center">
-                    <strong>Note:</strong> This is an estimation based on the provided inputs and assumptions. Actual results may vary due to ad platform algorithms, ad quality, audience behavior, and market competition. The "Assumed Campaign Pacing" is a key factor in this prediction.
+                    <strong>Note:</strong> This is an estimation based on the provided inputs and assumptions. Actual results may vary.
                 </p>
+
+                <div id="aiButtonContainer" class="text-center mt-6 hidden">
+                    <button id="getAiInsightsButton" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50">
+                        ✨ Get AI Insights & Recommendations
+                    </button>
+                </div>
             </div>
+        </div>
+
+        <div id="aiInsightsSection" class="bg-purple-50 p-6 rounded-lg shadow mt-6 hidden">
+            <h2 class="text-2xl font-semibold text-purple-700 mb-4 text-center">AI-Powered Insights</h2>
+            <div id="aiLoadingIndicator" class="loader hidden"></div>
+            <div id="aiErrorMessage" class="text-red-600 bg-red-100 p-3 rounded-md mb-4 hidden text-center"></div>
+            <div id="aiInsightsContent" class="text-sm text-slate-700 prose prose-sm max-w-none">
+                </div>
         </div>
     </div>
 
@@ -156,14 +194,43 @@
     </footer>
 
     <script>
-        // Set current year in footer
+        // --- DOM Elements ---
+        const totalAudienceEl = document.getElementById('totalAudience');
+        const budgetEl = document.getElementById('budget');
+        const startDateEl = document.getElementById('startDate');
+        const penetrationRateEl = document.getElementById('penetrationRate');
+        const cpmEl = document.getElementById('cpm');
+        const fatigueFrequencyEl = document.getElementById('fatigueFrequency');
+        const campaignPacingDaysEl = document.getElementById('campaignPacingDays');
+
+        const predictButton = document.getElementById('predictButton');
+        const resultsSection = document.getElementById('resultsSection');
+        const errorMessageDiv = document.getElementById('errorMessage');
+        const successMessageDiv = document.getElementById('successMessage');
+
+        const fatigueDateResultEl = document.getElementById('fatigueDateResult');
+        const reachableAudienceResultEl = document.getElementById('reachableAudienceResult');
+        const totalImpressionsResultEl = document.getElementById('totalImpressionsResult');
+        const dailySpendResultEl = document.getElementById('dailySpendResult');
+        const dailyImpressionsResultEl = document.getElementById('dailyImpressionsResult');
+        const impressionsToFatigueTotalResultEl = document.getElementById('impressionsToFatigueTotalResult');
+        const daysToGenerateTotalFatigueResultEl = document.getElementById('daysToGenerateTotalFatigueResult');
+        const effectiveDaysToFatigueResultEl = document.getElementById('effectiveDaysToFatigueResult');
+        
+        const aiButtonContainer = document.getElementById('aiButtonContainer');
+        const getAiInsightsButton = document.getElementById('getAiInsightsButton');
+        const aiInsightsSection = document.getElementById('aiInsightsSection');
+        const aiLoadingIndicator = document.getElementById('aiLoadingIndicator');
+        const aiErrorMessage = document.getElementById('aiErrorMessage');
+        const aiInsightsContent = document.getElementById('aiInsightsContent');
+
+        // Store last successful prediction data for AI prompt
+        let lastPredictionData = null;
+
+        // --- Initial Setup ---
         document.getElementById('currentYear').textContent = new Date().getFullYear();
+        startDateEl.value = new Date().toISOString().split('T')[0];
 
-        // Set default start date to today
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('startDate').value = today;
-
-        // Update slider value displays
         const sliders = [
             { id: 'penetrationRate', displayId: 'penetrationRateValue', unit: '%' },
             { id: 'cpm', displayId: 'cpmValue', unit: '$', prefix: true },
@@ -179,26 +246,31 @@
             });
         });
 
-        const predictButton = document.getElementById('predictButton');
-        const resultsSection = document.getElementById('resultsSection');
-        const errorMessageDiv = document.getElementById('errorMessage');
-        const successMessageDiv = document.getElementById('successMessage');
+        // --- Event Listeners ---
+        predictButton.addEventListener('click', handlePrediction);
+        getAiInsightsButton.addEventListener('click', fetchAiInsights);
 
-        predictButton.addEventListener('click', () => {
-            // Clear previous messages
+        // --- Functions ---
+        function handlePrediction() {
+            // Clear previous messages and AI insights
             errorMessageDiv.classList.add('hidden');
             errorMessageDiv.textContent = '';
             resultsSection.classList.add('hidden');
+            aiButtonContainer.classList.add('hidden');
+            aiInsightsSection.classList.add('hidden');
+            aiInsightsContent.innerHTML = '';
+            aiErrorMessage.classList.add('hidden');
+            lastPredictionData = null;
+
 
             // Get input values
-            const totalAudience = parseFloat(document.getElementById('totalAudience').value);
-            const budget = parseFloat(document.getElementById('budget').value);
-            const startDateStr = document.getElementById('startDate').value;
-            
-            const penetrationRate = parseFloat(document.getElementById('penetrationRate').value) / 100; // Convert to decimal
-            const cpm = parseFloat(document.getElementById('cpm').value);
-            const fatigueFrequency = parseFloat(document.getElementById('fatigueFrequency').value);
-            const campaignPacingDays = parseFloat(document.getElementById('campaignPacingDays').value);
+            const totalAudience = parseFloat(totalAudienceEl.value);
+            const budget = parseFloat(budgetEl.value);
+            const startDateStr = startDateEl.value;
+            const penetrationRate = parseFloat(penetrationRateEl.value) / 100;
+            const cpm = parseFloat(cpmEl.value);
+            const fatigueFrequency = parseFloat(fatigueFrequencyEl.value);
+            const campaignPacingDays = parseFloat(campaignPacingDaysEl.value);
 
             // --- Input Validation ---
             let errors = [];
@@ -210,78 +282,172 @@
             if (isNaN(fatigueFrequency) || fatigueFrequency <= 0) errors.push("Fatigue Frequency must be a positive number.");
             if (isNaN(campaignPacingDays) || campaignPacingDays <= 0) errors.push("Campaign Pacing Days must be a positive number.");
             
-            const startDate = new Date(startDateStr + "T00:00:00"); // Ensure local timezone interpretation
+            const startDate = new Date(startDateStr + "T00:00:00");
             if (isNaN(startDate.getTime())) errors.push("Invalid Start Date format.");
-
 
             if (errors.length > 0) {
                 errorMessageDiv.innerHTML = errors.join("<br>");
                 errorMessageDiv.classList.remove('hidden');
-                resultsSection.classList.remove('hidden'); // Show section to display error
+                resultsSection.classList.remove('hidden');
                 successMessageDiv.classList.add('hidden');
                 return;
             }
             
             successMessageDiv.classList.remove('hidden');
 
-
             // --- Calculations ---
             const reachableAudience = totalAudience * penetrationRate;
             if (reachableAudience === 0) {
-                errorMessageDiv.textContent = "Reachable Audience is zero. Please check Total Audience Size or Penetration Rate.";
-                errorMessageDiv.classList.remove('hidden');
-                resultsSection.classList.remove('hidden');
-                successMessageDiv.classList.add('hidden');
+                showError("Reachable Audience is zero. Please check Total Audience Size or Penetration Rate.");
                 return;
             }
 
             const dailySpend = budget / campaignPacingDays;
             if (dailySpend === 0) {
-                 errorMessageDiv.textContent = "Daily spend is zero. Check budget or campaign pacing days.";
-                errorMessageDiv.classList.remove('hidden');
-                resultsSection.classList.remove('hidden');
-                successMessageDiv.classList.add('hidden');
+                showError("Daily spend is zero. Check budget or campaign pacing days.");
                 return;
             }
             
             const dailyImpressions = (dailySpend / cpm) * 1000;
-             if (dailyImpressions === 0 || isNaN(dailyImpressions) || !isFinite(dailyImpressions)) {
-                errorMessageDiv.textContent = "Calculated daily impressions are zero or invalid. Check CPM, budget, or pacing days. Ensure CPM is not zero.";
-                errorMessageDiv.classList.remove('hidden');
-                resultsSection.classList.remove('hidden');
-                successMessageDiv.classList.add('hidden');
+            if (dailyImpressions === 0 || isNaN(dailyImpressions) || !isFinite(dailyImpressions)) {
+                showError("Calculated daily impressions are zero or invalid. Check CPM, budget, or pacing days. Ensure CPM is not zero.");
                 return;
             }
 
-
             const impressionsToFatigueReachableAudience = reachableAudience * fatigueFrequency;
             const totalImpressionsFromBudget = (budget / cpm) * 1000;
-
-            // Theoretical days to generate enough impressions to fatigue the entire reachable audience
             const daysToGenerateEnoughImpressionsForTotalFatigue = impressionsToFatigueReachableAudience / dailyImpressions;
-
-            // Effective days until fatigue: minimum of theoretical days and campaign pacing days
-            // This means fatigue sets in either when enough impressions are delivered OR when the campaign (budget) ends, whichever is sooner.
             const effectiveDaysToFatigue = Math.min(daysToGenerateEnoughImpressionsForTotalFatigue, campaignPacingDays);
-            
-            const finalEffectiveDays = Math.ceil(effectiveDaysToFatigue); // Round up to the next full day
+            const finalEffectiveDays = Math.ceil(effectiveDaysToFatigue);
 
             const fatigueDate = new Date(startDate);
             fatigueDate.setDate(startDate.getDate() + finalEffectiveDays);
+            const fatigueDateString = fatigueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
             // --- Display Results ---
-            document.getElementById('fatigueDateResult').textContent = fatigueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-            
-            document.getElementById('reachableAudienceResult').textContent = Math.round(reachableAudience).toLocaleString();
-            document.getElementById('totalImpressionsResult').textContent = Math.round(totalImpressionsFromBudget).toLocaleString();
-            document.getElementById('dailySpendResult').textContent = `$${dailySpend.toFixed(2).toLocaleString()}`;
-            document.getElementById('dailyImpressionsResult').textContent = Math.round(dailyImpressions).toLocaleString();
-            document.getElementById('impressionsToFatigueTotalResult').textContent = Math.round(impressionsToFatigueReachableAudience).toLocaleString();
-            document.getElementById('daysToGenerateTotalFatigueResult').textContent = daysToGenerateEnoughImpressionsForTotalFatigue.toFixed(1);
-            document.getElementById('effectiveDaysToFatigueResult').textContent = finalEffectiveDays;
+            fatigueDateResultEl.textContent = fatigueDateString;
+            reachableAudienceResultEl.textContent = Math.round(reachableAudience).toLocaleString();
+            totalImpressionsResultEl.textContent = Math.round(totalImpressionsFromBudget).toLocaleString();
+            dailySpendResultEl.textContent = `$${dailySpend.toFixed(2).toLocaleString()}`;
+            dailyImpressionsResultEl.textContent = Math.round(dailyImpressions).toLocaleString();
+            impressionsToFatigueTotalResultEl.textContent = Math.round(impressionsToFatigueReachableAudience).toLocaleString();
+            daysToGenerateTotalFatigueResultEl.textContent = daysToGenerateEnoughImpressionsForTotalFatigue.toFixed(1);
+            effectiveDaysToFatigueResultEl.textContent = finalEffectiveDays;
 
             resultsSection.classList.remove('hidden');
-        });
+            aiButtonContainer.classList.remove('hidden'); // Show AI button
+
+            // Store data for AI prompt
+            lastPredictionData = {
+                totalAudience, budget, startDateStr, penetrationRate, cpm, fatigueFrequency, campaignPacingDays,
+                reachableAudience: Math.round(reachableAudience),
+                dailyImpressions: Math.round(dailyImpressions),
+                effectiveDaysToFatigue: finalEffectiveDays,
+                fatigueDateString
+            };
+        }
+
+        function showError(message) {
+            errorMessageDiv.textContent = message;
+            errorMessageDiv.classList.remove('hidden');
+            resultsSection.classList.remove('hidden');
+            successMessageDiv.classList.add('hidden');
+            aiButtonContainer.classList.add('hidden');
+        }
+
+        async function fetchAiInsights() {
+            if (!lastPredictionData) {
+                aiErrorMessage.textContent = "Please calculate a prediction first.";
+                aiErrorMessage.classList.remove('hidden');
+                aiInsightsSection.classList.remove('hidden');
+                return;
+            }
+
+            aiInsightsSection.classList.remove('hidden');
+            aiLoadingIndicator.classList.remove('hidden');
+            aiInsightsContent.innerHTML = '';
+            aiErrorMessage.classList.add('hidden');
+
+            const {
+                totalAudience, budget, startDateStr, penetrationRate, cpm, fatigueFrequency, campaignPacingDays,
+                reachableAudience, dailyImpressions, effectiveDaysToFatigue, fatigueDateString
+            } = lastPredictionData;
+
+            const prompt = `
+                As a helpful assistant for digital marketers, please analyze the following LinkedIn campaign scenario and provide insights:
+
+                Campaign Inputs:
+                - Total Target Audience Size: ${totalAudience.toLocaleString()}
+                - Total Budget: $${budget.toLocaleString()}
+                - Campaign Start Date: ${startDateStr}
+                - Assumed Audience Penetration Rate: ${(penetrationRate * 100).toFixed(0)}%
+                - Assumed Average CPM: $${cpm}
+                - Target Ad Fatigue Frequency: ${fatigueFrequency} views per person
+                - Assumed Campaign Pacing: ${campaignPacingDays} days
+
+                Prediction Results:
+                - Reachable Audience: ${reachableAudience.toLocaleString()}
+                - Assumed Daily Impressions: ${dailyImpressions.toLocaleString()}
+                - Effective Days Until Predicted Fatigue: ${effectiveDaysToFatigue} days
+                - Predicted Creative Fatigue Date: ${fatigueDateString}
+
+                Based on this data for a LinkedIn campaign:
+                1. In simple terms, explain what this creative fatigue prediction means for the campaign.
+                2. Provide 3-5 actionable strategic tips to manage or refresh creatives effectively for this specific scenario. Focus on LinkedIn best practices, considering the predicted timeline and audience engagement. Make the tips practical for a digital marketing professional.
+                Format your response clearly, perhaps using bullet points for the tips.
+            `;
+
+            let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+            const payload = { contents: chatHistory };
+            const apiKey = ""; // Left empty as per instructions, Canvas will provide it
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('Gemini API Error:', errorData);
+                    throw new Error(`API request failed with status ${response.status}: ${errorData?.error?.message || 'Unknown error'}`);
+                }
+
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    let text = result.candidates[0].content.parts[0].text;
+                    // Basic Markdown-like to HTML conversion for display
+                    text = text.replace(/\n\n/g, '<br><p>'); // Paragraphs
+                    text = text.replace(/\n/g, '<br>');      // Line breaks
+                    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); // Bold
+                    text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');       // Italics
+                    // Convert numbered lists (e.g., 1. Item)
+                    text = text.replace(/(\d+\.\s)(.*?)(?=(\n<\w+>)|(\n<br>)|$)/g, '<li>$2</li>');
+                    text = text.replace(/(<li>.*?<\/li>)+/g, '<ul>$&</ul>');
+                     // Convert bulleted lists (e.g., - Item or * Item)
+                    text = text.replace(/(\s*-\s+|\s*\*\s+)(.*?)(?=(\n<\w+>)|(\n<br>)|$)/g, '<li>$2</li>');
+                    text = text.replace(/(<li>.*?<\/li>)+/g, '<ul>$&</ul>');
+
+
+                    aiInsightsContent.innerHTML = `<p>${text}</p>`; // Wrap in P for consistent styling
+                } else {
+                    console.error('Unexpected Gemini API response structure:', result);
+                    throw new Error('Failed to get valid content from AI. The response structure was unexpected.');
+                }
+            } catch (error) {
+                console.error('Error fetching AI insights:', error);
+                aiErrorMessage.textContent = `Error fetching AI insights: ${error.message}. Please check the console for more details.`;
+                aiErrorMessage.classList.remove('hidden');
+            } finally {
+                aiLoadingIndicator.classList.add('hidden');
+            }
+        }
+
     </script>
 
 </body>
